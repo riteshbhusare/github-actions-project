@@ -46,6 +46,29 @@ jobs:
           name: myapp
           path: target/*.war
 
+      - name: Install SonarQube Scanner CLI
+        run: |
+          if [ ! -d "$HOME/sonar-scanner-cli" ]; then
+            echo "Downloading SonarQube Scanner CLI..."
+            wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-7.3.0.5189-linux-x64.zip -O /tmp/sonar-scanner.zip
+            unzip /tmp/sonar-scanner.zip -d $HOME
+            mv $HOME/sonar-scanner-7.3.0.5189-linux-x64 $HOME/sonar-scanner-cli
+          fi
+          export PATH=$HOME/sonar-scanner-cli/bin:$PATH
+          sonar-scanner -v
+      # 7. SonarQube analysis
+      - name: SonarQube Analysis
+        env:
+          SONAR_HOST: ${{ secrets.SONAR_HOST }}
+          SONAR_LOGIN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          echo "SonarQube server URL: $SONAR_HOST"
+          curl -I $SONAR_HOST
+          mvn sonar:sonar \
+            -Dsonar.projectKey=hotstar \
+            -Dsonar.host.url=$SONAR_HOST \
+            -Dsonar.login=$SONAR_LOGIN
+            
   deploy:
     runs-on: [self-hosted, linux]
     needs: build
@@ -56,7 +79,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: myapp
-     
+
       - name: Deploy to Tomcat
         run: |
           WAR_FILE=$(ls *.war)
@@ -64,5 +87,6 @@ jobs:
           curl -v --upload-file "$WAR_FILE" \
             "http://${{ secrets.TOMCAT_USER }}:${{ secrets.TOMCAT_PASSWORD }}@${{ secrets.TOMCAT_HOST }}/manager/text/deploy?path=/myapp&update=true"
 
-
-
+      - name: Verify deployment
+        run: |
+          curl -I "${{ secrets.TOMCAT_HOST }}/myapp"
